@@ -16,7 +16,8 @@ class Saarisimulaattori:
 
         self.canvas: tk.Canvas = tk.Canvas(self.master, width=800, height=600, bg='blue')
         self.canvas.pack()
-
+        
+        self.max_saaret: int = 10
         self.saaret: List[Tuple[int, int, int]] = []
         self.apinat: List[Dict[str, Any]] = []
         self.uivat_apinat: List[Dict[str, Any]] = []
@@ -34,16 +35,21 @@ class Saarisimulaattori:
         self.uimaan_nappi: tk.Button = tk.Button(self.master, text="Lähetä apina uimaan", command=self.laheta_apina_uimaan)
         self.uimaan_nappi.pack()
 
+        self.apina_maara_var = tk.StringVar()
+        self.apina_maara_label = tk.Label(self.master, textvariable=self.apina_maara_var)
+        self.apina_maara_label.pack()
+        self.paivita_apina_maara()
+
         threading.Thread(target=self.apinan_aanet, daemon=True).start()
         threading.Thread(target=self.apinoiden_elama, daemon=True).start()
         threading.Thread(target=self.uivien_apinoiden_elama, daemon=True).start()
 
     def tee_saari(self, soita_aani: bool = True) -> None:
-        """Funktio tarkistaa ensin onko 'saaret' listassa jo kymmenen saarta. 
+        """Funktio tarkistaa ensin onko 'saaret' listassa jo tarpeeksi monta saarta. 
         Tämän jälkeen funktio menee looppiin, jossa se luo satunnaisesti x ja y arvot 
         ja tarkistaa leikkaako saari toisen saaren. 
         Tämän jälkeen jatketaan saaren luomiseen ja lisätään se 'saaret' listaan."""
-        if len(self.saaret) >= 10:
+        if len(self.saaret) >= self.max_saaret:
             print("Meri on täynnä saaria!")
             return
 
@@ -82,6 +88,7 @@ class Saarisimulaattori:
                 'y': apina_y,
                 'saari': (x, y)
             })
+        self.paivita_apina_maara()
 
     def apinoiden_elama(self) -> None:
         """Simuloi apinoiden elämää ja mahdollisuutta kuolla nauruun.
@@ -90,7 +97,7 @@ class Saarisimulaattori:
             for apina in self.apinat:
                 if random.random() < 0.01:
                     self.apina_kuolee_nauruun(apina)
-            time.sleep(1)
+            time.sleep(10)
 
     def uivien_apinoiden_elama(self) -> None:
         while True:
@@ -104,17 +111,20 @@ class Saarisimulaattori:
     def apina_kuolee_nauruun(self, apina: Dict[str, Any]) -> None:
         self.canvas.delete(apina['id'])
         self.apinat.remove(apina)
+        # Kolme piippausta, ha-ha-ha
         for _ in range(3):
-            winsound.Beep(1000, 50)
-        print("Apina kuoli nauruun!")
-        
+            winsound.Beep(3000, 50)
+        print(f"Apina-{apina['id']} kuoli nauruun!")
+        self.paivita_apina_maara()
+
     def apina_syodaan(self, apina: Dict[str, Any]) -> None:
         """Funktio käsittelee apinoiden syödyksi tulemista.
         Poistaa apinan listasta sekä pelipohjalta ja soittaa äänen merkiksi."""
         self.canvas.delete(apina['id'])
         self.uivat_apinat.remove(apina)
         winsound.Beep(100, 1000)
-        print("Apina tuli syödyksi!")
+        print(f"Apina-{apina['id']} tuli syödyksi! Hän kerkesi uida {int(apina['uintimatka'])} yksikköä!")
+        self.paivita_apina_maara()
 
     def laita_apina_uimaan(self, apina: Dict[str, Any]) -> None:
         self.apinat.remove(apina)
@@ -129,6 +139,7 @@ class Saarisimulaattori:
         self.uivat_apinat.append(apina)
 
         self.liikuta_apinaa(apina)
+        self.paivita_apina_maara()
 
     def liikuta_apinaa(self, apina: Dict[str, Any]) -> None:
         """Liikuttaa apinaa merellä ja jatkaa liikettä, kunnes apina tulee syödyksi."""
@@ -164,7 +175,7 @@ class Saarisimulaattori:
         if self.apinat:
             apina = random.choice(self.apinat)
             self.laita_apina_uimaan(apina)
-            print("Apina lähti uimaan!")
+            print(f"Apina-{apina['id']} lähti uimaan!")
         else:
             print("Ei apinoita lähetettäväksi uimaan!")
 
@@ -172,10 +183,11 @@ class Saarisimulaattori:
         """Tuottaa apinoiden ääniä jatkuvasti säikeessä.
         Ääniä ei tuoteta, jos saaria ei ole olemassa."""
         while True:
-            if self.saaret:
+            if self.saaret and self.apinat:
                 for _ in range(min(len(self.saaret), 10)):
                     taajuus: int = random.randint(400, 2000)
-                    winsound.Beep(taajuus, 100)
+                    for _ in range(2):
+                        winsound.Beep(taajuus, 200)
             time.sleep(10)
 
     def tyhjenna_meri(self) -> None:
@@ -190,11 +202,12 @@ class Saarisimulaattori:
         self.apinat = []
         self.uivat_apinat = []
         print("Meri on tyhjennetty saarista ja apinoista.")
+        self.paivita_apina_maara()
 
     def tee_10_saarta(self) -> None:
         """Tekee kymmenen saarta kerralla. Tyhjentää ensin meren saarista ja apinoista."""
         self.tyhjenna_meri()
-        for _ in range(10):
+        for _ in range(self.max_saaret):
             self.tee_saari(soita_aani=False)
         self.canvas.update()
         self.soita_tulivuorenpurkaus()
@@ -207,7 +220,13 @@ class Saarisimulaattori:
         self.canvas.coords(apina['id'], apina['x'], apina['y'], apina['x'] + 5, apina['y'] + 5)
         self.uivat_apinat.remove(apina)
         self.apinat.append(apina)
-        print("Apina palasi saarelle!")
+        print(f"Apina-{apina['id']} palasi saarelle!")
+        self.paivita_apina_maara()
+
+    def paivita_apina_maara(self) -> None:
+        """Päivittää apinoiden kokonaismäärän näytölle."""
+        kokonaismaara = len(self.apinat) + len(self.uivat_apinat)
+        self.apina_maara_var.set(f"Apinoita yhteensä: {kokonaismaara}")
 
 root: tk.Tk = tk.Tk()
 app: Saarisimulaattori = Saarisimulaattori(root)
