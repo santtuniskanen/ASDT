@@ -22,6 +22,7 @@ class Saarisimulaattori:
         self.apinat: List[Dict[str, Any]] = []
         self.uivat_apinat: List[Dict[str, Any]] = []
         self.saari_koko: int = 50
+        self.saari_nimet: Dict[int, str] = {}
 
         self.tulivuori_nappi: tk.Button = tk.Button(self.master, text="Tulivuorenpurkaus", command=self.tee_saari)
         self.tulivuori_nappi.pack()
@@ -58,19 +59,28 @@ class Saarisimulaattori:
             y: int = random.randint(0, 600 - self.saari_koko)
 
             if not any(self.saaret_leikkaa(x, y, saari) for saari in self.saaret):
-                saari: int = self.canvas.create_oval(x, y, x + self.saari_koko, y + self.saari_koko, fill='green')
-                self.saaret.append((x, y, saari))
+                saari_id: int = self.canvas.create_oval(x, y, x + self.saari_koko, y + self.saari_koko, fill='green')
+                saari_nimi = f"S{len(self.saaret) + 1}"
+                self.saari_nimet[saari_id] = saari_nimi
+                teksti = self.canvas.create_text(x + self.saari_koko // 2, y + self.saari_koko // 2, text=f"{saari_nimi}\n0", font=("Arial", 10, "bold"))
+                self.saaret.append((x, y, saari_id, teksti))
                 self.tee_apinat(x, y)
                 if soita_aani:
                     self.soita_tulivuorenpurkaus()
                 return
 
+    def paivita_saaren_apinamaara(self, saari: Tuple[int, int, int, int]) -> None:
+        x, y, saari_id, teksti = saari
+        apina_maara = sum(1 for apina in self.apinat if apina['saari'] == (x, y))
+        self.canvas.itemconfig(teksti, text=f"{self.saari_nimet[saari_id]}\n{apina_maara}")
+
     def saaret_leikkaa(self, x: int, y: int, saari: Tuple[int, int, int]) -> bool:
         """Tarkistaa leikkaako saaret ja palauttaa siitä boolean arvon.
         saari-listasta tallennetaan arvot x ja y muuttujiin sx sekä sy, 
         jonka jälkeen verrataan arvoja funktion argumentteihin."""
-        sx, sy, _ = saari
-        return (x < sx + self.saari_koko and x + self.saari_koko > sx and y < sy + self.saari_koko and y + self.saari_koko > sy)
+        sx, sy, _, _ = saari
+        return (x < sx + self.saari_koko and x + self.saari_koko > sx and
+                y < sy + self.saari_koko and y + self.saari_koko > sy)
 
     def soita_tulivuorenpurkaus(self) -> None:
         """Soittaa tulivuorenpurkausäänen kutsuttaessa"""
@@ -88,6 +98,8 @@ class Saarisimulaattori:
                 'y': apina_y,
                 'saari': (x, y)
             })
+        saari = next(s for s in self.saaret if s[0] == x and s[1] == y)
+        self.paivita_saaren_apinamaara(saari)
         self.paivita_apina_maara()
 
     def apinoiden_elama(self) -> None:
@@ -128,6 +140,8 @@ class Saarisimulaattori:
 
     def laita_apina_uimaan(self, apina: Dict[str, Any]) -> None:
         self.apinat.remove(apina)
+        saari = next(s for s in self.saaret if s[0] == apina['saari'][0] and s[1] == apina['saari'][1])
+        self.paivita_saaren_apinamaara(saari)
 
         suunta = random.uniform(0, 2 * math.pi)
         nopeus = random.uniform(1, 3)
@@ -192,8 +206,9 @@ class Saarisimulaattori:
 
     def tyhjenna_meri(self) -> None:
         """Tyhjentää merestä saaret sekä apinat, jonka jälkeen alustaa listat tyhjiksi."""
-        for _, _, saari in self.saaret:
+        for _, _, saari, teksti in self.saaret:
             self.canvas.delete(saari)
+            self.canvas.delete(teksti)
         for apina in self.apinat:
             self.canvas.delete(apina['id'])
         for apina in self.uivat_apinat:
@@ -201,6 +216,7 @@ class Saarisimulaattori:
         self.saaret = []
         self.apinat = []
         self.uivat_apinat = []
+        self.saari_nimet = {}
         print("Meri on tyhjennetty saarista ja apinoista.")
         self.paivita_apina_maara()
 
@@ -213,14 +229,16 @@ class Saarisimulaattori:
         self.soita_tulivuorenpurkaus()
 
     def apina_palaa_saarelle(self, apina: Dict[str, Any]) -> None:
-        """Palauttaa apinan lähimmälle saarelle"""
         lahin_saari = min(self.saaret, key=lambda s: math.hypot(s[0] - apina['x'], s[1] - apina['y']))
-        apina['x'] = lahin_saari[0] + random.randint(5, self.saari_koko - 5)
-        apina['y'] = lahin_saari[1] + random.randint(5, self.saari_koko - 5)
+        x, y, saari_id, _ = lahin_saari
+        apina['x'] = x + random.randint(5, self.saari_koko - 5)
+        apina['y'] = y + random.randint(5, self.saari_koko - 5)
+        apina['saari'] = (x, y)
         self.canvas.coords(apina['id'], apina['x'], apina['y'], apina['x'] + 5, apina['y'] + 5)
         self.uivat_apinat.remove(apina)
         self.apinat.append(apina)
-        print(f"Apina-{apina['id']} palasi saarelle!")
+        self.paivita_saaren_apinamaara(lahin_saari)
+        print(f"Apina-{apina['id']} palasi saarelle {self.saari_nimet[saari_id]}!")
         self.paivita_apina_maara()
 
     def paivita_apina_maara(self) -> None:
